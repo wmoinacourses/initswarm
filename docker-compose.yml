@@ -1,0 +1,216 @@
+version: "3.7"
+services:
+
+  busqueda:
+    image: twcammaster.uv.es/proyecto1-api-busqueda:latest
+    ports:
+       - "8081:8081"
+    networks:
+      - proxy-net
+    depends_on:
+      - mysql
+      - rabbitmq
+    environment:
+        WAIT_HOST: mysql:3306
+        SPRING_DATASOURCE_URL: jdbc:mysql://mysql/mydb?useUnicode=true&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+        SPRING_DATASOURCE_USERNAME: root
+        SPRING_DATASOURCE_PASSWORD: root
+        RABBIT_HOST: rabbitmq
+        RABBIT_VHOST: distribuidos
+        RABBITMQ_USER_ROOT: twcam-pls
+        RABBITMQ_PWD_ROOT: twcam-pls 
+    deploy:
+        mode: global
+        labels:
+          - "traefik.docker.network=proxy-net"
+          - "traefik.enable=true"
+          - "traefik.port=8081"
+          - "traefik.frontend.rule=Host:busqueda.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+
+        update_config:
+          parallelism: 2
+          delay: 10s
+        restart_policy:
+          condition: on-failure
+          delay: 10s
+          max_attempts: 4
+          window: 120s
+        placement:
+          constraints: [node.role == worker]
+          
+  pago:
+    image: twcammaster.uv.es/proyecto1-api-pago:latest
+    ports:
+       - "8082:8082"
+    networks:
+      - proxy-net
+    depends_on:
+      - rabbitmq
+    environment:
+        RABBIT_HOST: rabbitmq
+        RABBIT_VHOST: distribuidos
+        RABBITMQ_USER_ROOT: twcam-pls
+        RABBITMQ_PWD_ROOT: twcam-pls 
+    deploy:
+        mode: global
+        labels:
+          - "traefik.docker.network=proxy-net"
+          - "traefik.enable=true"
+          - "traefik.port=8082"
+          - "traefik.frontend.rule=Host:pago.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+        update_config:
+          parallelism: 2
+          delay: 10s
+        restart_policy:
+          condition: on-failure
+          delay: 10s
+          max_attempts: 4
+          window: 120s
+        placement:
+          constraints: [node.role == worker]
+  
+  embarque:
+    image: twcammaster.uv.es/proyecto1-api-embarque:latest
+    networks:
+      - proxy-net
+    depends_on:
+      - mongo
+    ports:
+       - "8083:8080"
+    deploy:
+        mode: global
+        labels:
+          - "traefik.docker.network=proxy-net"
+          - "traefik.enable=true"
+          - "traefik.port=8080"
+          - "traefik.frontend.rule=Host:embarque.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+        update_config:
+          parallelism: 2
+          delay: 10s
+        restart_policy:
+          condition: on-failure
+          delay: 10s
+          max_attempts: 3
+          window: 120s
+        placement:
+          constraints: [node.role == worker]
+  
+  rabbitmq:
+      image: twcammaster.uv.es/proyecto1-rabbitmq-server:latest
+      ports:
+      - "15672:15672"
+      - "5672:5672"
+      - "35197:35197"
+      networks:
+        - proxy-net
+      deploy:
+        mode: global
+        labels:
+          - "traefik.enable=true"
+          - "traefik.port=15672"
+          - "traefik.docker.network=proxy-net"
+          - "traefik.frontend.rule=Host:rabbitmq.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+        placement:
+          constraints: [node.role == worker]
+    
+
+  mysql:
+      image: twcammaster.uv.es/proyecto1-mysql-server
+      volumes:
+        - dbsql-data:/var/lib/mysql
+      networks:
+        - proxy-net
+      ports:
+        - "3306:3306"
+      environment:
+        - MYSQL_USER=springuser
+        - MYSQL_PASSWORD=ThePassword
+        - MYSQL_ROOT_PASSWORD=root
+      deploy:
+        mode: global
+        labels:
+          - "traefik.docker.network=proxy-net"
+          - "traefik.enable=true"
+          - "traefik.port=27017"
+          - "traefik.frontend.rule=Host:mysql.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+        placement:
+          constraints: [node.role == worker]
+
+  mongo:
+      image: mongo
+      volumes:
+        - dbnosql-data:/data/db
+      networks:
+        - proxy-net
+      ports:
+        - "27017:27017"
+      deploy:
+        mode: global
+        labels:
+          - "traefik.docker.network=proxy-net"
+          - "traefik.enable=true"
+          - "traefik.port=27017"
+          - "traefik.frontend.rule=Host:mongo.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+        placement:
+          constraints: [node.role == worker]
+
+  visualizer:
+      image: dockersamples/visualizer:stable
+      networks:
+        - proxy-net
+      ports:
+        - "8989:8080"
+      stop_grace_period: 1m30s
+      volumes:
+        - "/var/run/docker.sock:/var/run/docker.sock"
+      deploy:
+        labels:
+          - "traefik.docker.network=proxy-net"
+          - "traefik.enable=true"
+          - "traefik.port=8080"
+          - "traefik.frontend.rule=Host:visual.twcam.tk"
+          - "traefik.backend.loadbalancer.swarm=true"
+          - "traefik.backend.healthcheck.path=/"
+          - "traefik.backend.healthcheck.interval=15s"
+          - "traefik.backend.healthcheck.timeout=15s"
+          - "traefik.protocol=http"
+        placement:
+          constraints: [node.role == manager]
+
+networks:
+  proxy-net:
+    external: true
+
+volumes:
+  dbsql-data:
+  dbnosql-data:
